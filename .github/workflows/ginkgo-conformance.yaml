@@ -1,0 +1,35 @@
+name: ginkgo-conformance
+
+on:
+    schedule:
+        - cron: '0 18 * * *'
+
+permissions:
+    contents: read
+
+jobs:
+    conform:
+        runs-on: ubuntu-latest
+
+        steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+
+        - uses: actions/setup-go@v5
+          with:
+            go-version-file: go.mod
+    
+        - name: Check go modules
+          run: |
+            go mod tidy
+
+            git --no-pager diff go.mod go.sum
+            test -z "$(git status --porcelain)"
+
+        - name: Install tools
+          run: |
+              go install github.com/VestigeJ/kubetest2/kubetest2-k3k@latest
+              go install sigs.k8s.io/kubetest2/kubetest2-tester-ginkgo@latest
+              
+        - name: Run tests
+          run: kubetest2-k3k --up --namespace default --name default --mode virtual --test ginkgo -- --env KUBECONFIG=/$HOME/default-kubeconfig.yaml --focus-regex "[quick]"
