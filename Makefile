@@ -9,10 +9,12 @@ CONTROLLER_TOOLS_VERSION ?= v0.14.0
 GINKGO_VERSION ?= v2.21.0
 ENVTEST_VERSION ?= latest
 ENVTEST_K8S_VERSION := 1.31.0
+CRD_REF_DOCS_VER ?= v0.1.0
 
 GOLANGCI_LINT ?= go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 CONTROLLER_GEN ?= go run sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION)
 GINKGO ?= go run github.com/onsi/ginkgo/v2/ginkgo@$(GINKGO_VERSION)
+CRD_REF_DOCS := go run github.com/elastic/crd-ref-docs@$(CRD_REF_DOCS_VER)
 
 ENVTEST ?= go run sigs.k8s.io/controller-runtime/tools/setup-envtest@$(ENVTEST_VERSION)
 ENVTEST_DIR ?= $(shell pwd)/.envtest
@@ -52,7 +54,7 @@ push-%:
 
 .PHONY: test
 test:	## Run all the tests
-	$(GINKGO) -v -r
+	$(GINKGO) -v -r --label-filter=$(label-filter)
 
 .PHONY: test-unit
 test-unit:	## Run the unit tests (skips the e2e)
@@ -75,8 +77,9 @@ build-crds:	## Build the CRDs specs
 		output:crd:dir=./charts/k3k/crds
 
 .PHONY: docs
-docs:	## Build the CRDs docs
-	$(MAKE) -C docs/crds
+docs:	## Build the CRDs and CLI docs
+	$(CRD_REF_DOCS) --config=./docs/crds/config.yaml --renderer=markdown --source-path=./pkg/apis/k3k.io/v1alpha1 --output-path=./docs/crds/crd-docs.md
+	@go run ./docs/cli/genclidoc.go
 
 .PHONY: lint
 lint:	## Find any linting issues in the project
@@ -84,10 +87,10 @@ lint:	## Find any linting issues in the project
 
 .PHONY: validate
 validate: build-crds docs ## Validate the project checking for any dependency or doc mismatch
+	$(GINKGO) unfocus
 	go mod tidy
-	git --no-pager diff go.mod go.sum
-	test -z "$(shell git status --porcelain)"
-
+	git status --porcelain
+	git --no-pager diff --exit-code
 
 .PHONY: install
 install:	## Install K3k with Helm on the targeted Kubernetes cluster
